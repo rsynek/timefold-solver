@@ -320,10 +320,10 @@ class TimefoldProcessor {
         assertEmptyInstances(indexView, DotNames.PLANNING_SOLUTION);
         // Multiple classes and single solver
         Collection<AnnotationInstance> annotationInstanceCollection = indexView.getAnnotations(DotNames.PLANNING_SOLUTION);
-        if (annotationInstanceCollection.size() > 1 && solverConfigMap.size() == 1) {
-            throw new IllegalStateException("Multiple classes (%s) found in the classpath with a @%s annotation.".formatted(
-                    convertAnnotationInstancesToString(annotationInstanceCollection), PlanningSolution.class.getSimpleName()));
-        }
+        //        if (annotationInstanceCollection.size() > 1 && solverConfigMap.size() == 1) {
+        //            throw new IllegalStateException("Multiple classes (%s) found in the classpath with a @%s annotation.".formatted(
+        //                    convertAnnotationInstancesToString(annotationInstanceCollection), PlanningSolution.class.getSimpleName()));
+        //        }
         // Multiple classes and at least one solver config does not specify the solution class
         List<String> solverConfigWithoutSolutionClassList = solverConfigMap.entrySet().stream()
                 .filter(e -> e.getValue().getSolutionClass() == null)
@@ -340,16 +340,17 @@ class TimefoldProcessor {
                                     convertAnnotationInstancesToString(annotationInstanceCollection)));
         }
         // Unused solution classes
-        List<String> unusedSolutionClassList = annotationInstanceCollection.stream()
-                .map(planningClass -> planningClass.target().asClass().name().toString())
-                .filter(planningClassName -> solverConfigMap.values().stream().filter(c -> c.getSolutionClass() != null)
-                        .noneMatch(c -> c.getSolutionClass().getName().equals(planningClassName)))
-                .toList();
-        if (annotationInstanceCollection.size() > 1 && !unusedSolutionClassList.isEmpty()) {
-            throw new IllegalStateException(
-                    "Unused classes ([%s]) found with a @%s annotation.".formatted(String.join(", ", unusedSolutionClassList),
-                            PlanningSolution.class.getSimpleName()));
-        }
+        //        List<String> unusedSolutionClassList = annotationInstanceCollection.stream()
+        //                .filter(planningClass -> !planningClass.target().asClass().isAbstract())
+        //                .map(planningClass -> planningClass.target().asClass().name().toString())
+        //                .filter(planningClassName -> solverConfigMap.values().stream().filter(c -> c.getSolutionClass() != null)
+        //                        .noneMatch(c -> c.getSolutionClass().getName().equals(planningClassName)))
+        //                .toList();
+        //        if (annotationInstanceCollection.size() > 1 && !unusedSolutionClassList.isEmpty()) {
+        //            throw new IllegalStateException(
+        //                    "Unused classes ([%s]) found with a @%s annotation.".formatted(String.join(", ", unusedSolutionClassList),
+        //                            PlanningSolution.class.getSimpleName()));
+        //        }
         // Validate the solution classes target types
         List<AnnotationTarget> targetList = annotationInstanceCollection.stream()
                 .map(AnnotationInstance::target)
@@ -385,10 +386,10 @@ class TimefoldProcessor {
     }
 
     private void assertSolverConfigConstraintClasses(IndexView indexView, Map<String, SolverConfig> solverConfigMap) {
-        Collection<ClassInfo> simpleScoreClassCollection = indexView.getAllKnownImplementors(DotNames.EASY_SCORE_CALCULATOR);
-        Collection<ClassInfo> constraintScoreClassCollection = indexView.getAllKnownImplementors(DotNames.CONSTRAINT_PROVIDER);
-        Collection<ClassInfo> incrementalScoreClassCollection =
-                indexView.getAllKnownImplementors(DotNames.INCREMENTAL_SCORE_CALCULATOR);
+        var simpleScoreClassCollection = getAllNonAbstract(indexView.getAllKnownImplementors(DotNames.EASY_SCORE_CALCULATOR));
+        var constraintScoreClassCollection = getAllNonAbstract(indexView.getAllKnownImplementors(DotNames.CONSTRAINT_PROVIDER));
+        var incrementalScoreClassCollection =
+                getAllNonAbstract(indexView.getAllKnownImplementors(DotNames.INCREMENTAL_SCORE_CALCULATOR));
         // No score classes
         if (simpleScoreClassCollection.isEmpty() && constraintScoreClassCollection.isEmpty()
                 && incrementalScoreClassCollection.isEmpty()) {
@@ -397,7 +398,7 @@ class TimefoldProcessor {
                             ConstraintProvider.class.getSimpleName(), IncrementalScoreCalculator.class.getSimpleName()));
         }
         // Multiple classes and single solver
-        String errorMessage = "Multiple score classes classes (%s) that implements %s were found in the classpath.";
+        var errorMessage = "Multiple score classes classes (%s) that implements %s were found in the classpath.";
         if (simpleScoreClassCollection.size() > 1 && solverConfigMap.size() == 1) {
             throw new IllegalStateException(errorMessage.formatted(
                     simpleScoreClassCollection.stream().map(c -> c.name().toString()).collect(Collectors.joining(", ")),
@@ -418,7 +419,7 @@ class TimefoldProcessor {
                 Some solver configs (%s) don't specify a %s score class, yet there are multiple available (%s) on the classpath.
                 Maybe set the XML config file to the related solver configs, or add the missing score classes to the XML files,
                 or remove the unnecessary score classes from the classpath.""";
-        List<String> solverConfigWithoutConstraintClassList = solverConfigMap.entrySet().stream()
+        var solverConfigWithoutConstraintClassList = solverConfigMap.entrySet().stream()
                 .filter(e -> e.getValue().getScoreDirectorFactoryConfig() == null
                         || e.getValue().getScoreDirectorFactoryConfig().getEasyScoreCalculatorClass() == null)
                 .map(Map.Entry::getKey)
@@ -452,7 +453,7 @@ class TimefoldProcessor {
                     incrementalScoreClassCollection.stream().map(c -> c.name().toString()).collect(Collectors.joining(", "))));
         }
         // Unused score classes
-        List<String> solverConfigWithUnusedSolutionClassList = simpleScoreClassCollection.stream()
+        var solverConfigWithUnusedSolutionClassList = simpleScoreClassCollection.stream()
                 .map(clazz -> clazz.name().toString())
                 .filter(className -> solverConfigMap.values().stream()
                         .filter(c -> c.getScoreDirectorFactoryConfig() != null
@@ -489,6 +490,13 @@ class TimefoldProcessor {
             throw new IllegalStateException(errorMessage.formatted(String.join(", ", solverConfigWithUnusedSolutionClassList),
                     IncrementalScoreCalculator.class.getSimpleName()));
         }
+    }
+
+    private static List<ClassInfo> getAllNonAbstract(Collection<ClassInfo> classInfoCollection) {
+        return classInfoCollection.stream()
+                .filter(c -> !Modifier.isAbstract(c.flags()))
+                .toList();
+
     }
 
     private void assertEmptyInstances(IndexView indexView, DotName dotName) {
@@ -846,8 +854,8 @@ class TimefoldProcessor {
         return scoreDirectorFactoryConfig;
     }
 
-    private <T> Class<? extends T> findFirstImplementingClass(DotName targetDotName, IndexView indexView) {
-        Collection<ClassInfo> classInfoCollection = indexView.getAllKnownImplementors(targetDotName);
+    private static <T> Class<? extends T> findFirstImplementingClass(DotName targetDotName, IndexView indexView) {
+        Collection<ClassInfo> classInfoCollection = getAllNonAbstract(indexView.getAllKnownImplementors(targetDotName));
         if (classInfoCollection.isEmpty()) {
             return null;
         }
@@ -860,7 +868,7 @@ class TimefoldProcessor {
                 .collect(Collectors.joining(", ")));
     }
 
-    private <T> Class<? extends T> convertClassInfoToClass(ClassInfo classInfo) {
+    private static <T> Class<? extends T> convertClassInfoToClass(ClassInfo classInfo) {
         String className = classInfo.name().toString();
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         try {
@@ -903,6 +911,7 @@ class TimefoldProcessor {
             Collection<AnnotationInstance> planningSolutionAnnotationInstanceCollection =
                     indexView.getAnnotations(DotNames.PLANNING_SOLUTION);
             List<String> unusedSolutionClassList = planningSolutionAnnotationInstanceCollection.stream()
+                    .filter(planningClass -> !planningClass.target().asClass().isAbstract())
                     .map(planningClass -> planningClass.target().asClass().name().toString())
                     .filter(planningClassName -> reflectiveClassSet.stream()
                             .noneMatch(clazz -> clazz.getName().equals(planningClassName)))
